@@ -37,3 +37,21 @@ export const Character_Count_Indicator = [
     {numeric: 12, alphanumeric: 11, byte: 16},
     {numeric: 14, alphanumeric: 13, byte: 16},
 ]
+
+export const Alphanumeric_Code = new Map([
+    [" ", 36],
+    ["$", 37],
+    ["%", 38],
+    ["*", 39],
+    ["+", 40],
+    ["-", 41],
+    [".", 42],
+    ["/", 43],
+    [":", 44],
+]);
+for (let i = 0; i < 10; i++) {
+    Alphanumeric_Code.set(i.toString(), i);
+}
+for (let i = 65; i <= 90; i++) {
+    Alphanumeric_Code.set(String.fromCharCode(i), i - 55);
+}
