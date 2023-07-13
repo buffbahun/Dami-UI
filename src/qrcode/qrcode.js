@@ -1,4 +1,4 @@
-import { encodeDataWithStartBits } from "./encoding-service";
+import { encodeDataWithStartAndEndBits } from "./encoding-service";
 
 const svgns = "http://www.w3.org/2000/svg";
 
@@ -26,7 +26,7 @@ class DamiQrcode extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log(encodeDataWithStartBits("HELLO WORLD", "Q"));
+        console.log(encodeDataWithStartAndEndBits("HELLO WORLD", "Q"));
     }
 
     static get observedAttributes() {

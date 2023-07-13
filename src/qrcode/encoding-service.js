@@ -1,4 +1,4 @@
-import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code} from "./encoding-structure";
+import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table} from "./encoding-structure";
 
 function getQrMode(value) {
     if (typeof value !== "string" || value === "") {
@@ -14,7 +14,7 @@ function getQrMode(value) {
 }
 
 function getCodeCapacityAndVersion(value, modeType, correctionLevel) {
-    const charLength = value.length;
+    const charLength = utf8Length(value);
 
     const capacity = Character_Capacity_Table[modeType][correctionLevel].find(val => val >= charLength);
     const version = Character_Capacity_Table[modeType][correctionLevel].indexOf(capacity) + 1;
@@ -33,7 +33,7 @@ function characterCountSize(version, modeType) {
 }
 
 function getCharacterCountIndicator(value, version, modeType) {
-    const charLength = value.length;
+    const charLength = utf8Length(value);
     const charCountLength = characterCountSize(version, modeType);
 
     const charLenInBinary = charLength.toString(2).split("");
@@ -45,7 +45,7 @@ function getCharacterCountIndicator(value, version, modeType) {
     return charLenInBinary.join("");
 }
 
-export function encodeDataWithStartBits(value, correctionLevel) {
+export function encodeDataWithStartAndEndBits(value, correctionLevel) {
     const modeType = getQrMode(value);
 
     if (!modeType) return;
@@ -62,7 +62,39 @@ export function encodeDataWithStartBits(value, correctionLevel) {
 
     if (!modeIndicator || !characterCountIndicator || !encodedData) return;
 
-    return [modeIndicator, characterCountIndicator, encodedData];
+    const dataAry = [modeIndicator, characterCountIndicator, encodedData];
+
+    const dataCapacity = Error_Correction_Code_Table[correctionLevel][version - 1];
+
+    if (!dataCapacity) return;
+
+    const encodedAry = encodedDataWithPaddings(dataAry, dataCapacity);
+
+    return encodedAry;
+}
+
+function encodedDataWithPaddings(dataAry, capacity) {
+    let dataBits = dataAry.flat().join("");
+    const capacityBitLen = capacity * 8;
+    const encodedAry = [];
+
+    if (capacityBitLen - dataBits.length >= 4) dataBits = dataBits.padEnd(dataBits.length + 4, "0");
+    else dataBits = dataBits.padEnd(capacityBitLen, "0");
+    
+    if (dataBits.length % 8 > 0) dataBits = dataBits.padEnd((Math.trunc(dataBits.length / 8) + 1) * 8, "0");
+
+    let i = 0;
+    while ((capacityBitLen / 8) > (dataBits.length / 8)) {
+        const padBytes = ["11101100", "00010001"];
+        dataBits = dataBits + padBytes[i % 2];
+        i++;
+    }
+
+    for (let start = 0; start < (dataBits.length / 8); start++) {
+        encodedAry.push( dataBits.slice(start * 8, (start + 1) * 8) );
+    }
+
+    return encodedAry;
 }
 
 function encodeData(value, modeType) {
@@ -71,7 +103,7 @@ function encodeData(value, modeType) {
     } else if (modeType === "alphanumeric") {
         return encodeAlphanumericData(value);
     } else if (modeType === "byte") {
-        //return encodeByteData(value);
+        return encodeByteData(value);
     } else {
         return;
     }
@@ -91,17 +123,15 @@ function encodeNumericData(value) {
         const numLen = digitLength(num);
         let binaryForm = num.toString(2);
 
-        if (numLen === 3 && binaryForm.length < 10) {
-            while (binaryForm.length < 10) binaryForm = "0" + binaryForm;
+        if (numLen === 3) {
+            binaryAry.push( binaryForm.padStart(10, "0") );
         }
-        if (numLen === 2 && binaryForm.length < 7) {
-            while (binaryForm.length < 7) binaryForm = "0" + binaryForm;
+        if (numLen === 2) {
+            binaryAry.push( binaryForm.padStart(7, "0") );
         }
-        if (numLen === 1 && binaryForm.length < 4) {
-            while (binaryForm.length < 4) binaryForm = "0" + binaryForm;
+        if (numLen === 1) {
+            binaryAry.push( binaryForm.padStart(4, "0") );
         }
-
-        binaryAry.push(binaryForm);
     });
 
     return binaryAry;
@@ -115,6 +145,12 @@ function digitLength(num) {
     }
 
     return count;
+}
+
+function utf8Length(value) {
+    const utf8Str = encodeURIComponent(value);
+    const hexNum = utf8Str.split("").filter(chr => chr === "%").length;
+    return utf8Str.length - (2 * hexNum);
 }
 
 function encodeAlphanumericData(value) {
@@ -137,15 +173,36 @@ function encodeAlphanumericData(value) {
             binaryForm = num.toString(2);
         }
 
-        if (str.length === 2 && binaryForm.length < 11) {
-            while (binaryForm.length < 11) binaryForm = "0" + binaryForm;
+        if (str.length === 2) {
+            binaryAry.push( binaryForm.padStart(11, "0") );
         }
-        if (str.length === 1 && binaryForm.length < 6) {
-            while (binaryForm.length < 6) binaryForm = "0" + binaryForm;
+        if (str.length === 1) {
+            binaryAry.push( binaryForm.padStart(6, "0") );
         }
-        
-        binaryAry.push(binaryForm);
     });
+
+    return binaryAry;
+}
+
+function encodeByteData(value) {
+    const utf8Str = encodeURIComponent(value);
+    const binaryAry = [];
+
+    let hex = 0;
+    for (let i = 0; i < utf8Str.length; i++) {
+        if (utf8Str[i] === "%") {
+            let binaryVal = parseInt(utf8Str[i+1] + utf8Str[i+2], 16).toString(2).padStart(8, '0');
+            binaryAry.push(binaryVal);
+            hex = 2;
+            continue;
+        }
+        if (hex > 0) {
+            hex--;
+            continue;
+        }
+
+        binaryAry.push( utf8Str[i].charCodeAt(0).toString(2).padStart(8, "0") );
+    }
 
     return binaryAry;
 }
