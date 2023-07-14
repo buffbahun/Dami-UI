@@ -1,4 +1,4 @@
-import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table} from "./encoding-structure";
+import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table, Galois_Field_Table, Remainder_Bits} from "./encoding-structure";
 
 function getQrMode(value) {
     if (typeof value !== "string" || value === "") {
@@ -45,7 +45,7 @@ function getCharacterCountIndicator(value, version, modeType) {
     return charLenInBinary.join("");
 }
 
-export function encodeDataWithStartAndEndBits(value, correctionLevel) {
+export function qrEncodedData(value, correctionLevel) {
     const modeType = getQrMode(value);
 
     if (!modeType) return;
@@ -64,13 +64,24 @@ export function encodeDataWithStartAndEndBits(value, correctionLevel) {
 
     const dataAry = [modeIndicator, characterCountIndicator, encodedData];
 
-    const dataCapacity = Error_Correction_Code_Table[correctionLevel][version - 1];
+    const dataCapacity = Error_Correction_Code_Table[correctionLevel][version - 1].dataCapacity;
+    const errorPerBlock = Error_Correction_Code_Table[correctionLevel][version - 1].errorPerBlock;
+    const group1 = Error_Correction_Code_Table[correctionLevel][version - 1].group1;
+    const group2 = Error_Correction_Code_Table[correctionLevel][version - 1].group2;
 
-    if (!dataCapacity) return;
+    if (!dataCapacity || !errorPerBlock) return;
 
     const encodedAry = encodedDataWithPaddings(dataAry, dataCapacity);
 
-    return encodedAry;
+    const codeBlocks = getAllCodeBlocks(encodedAry, group1, group2);
+    const errorBlocks = getAllErrorCorectionCode(errorPerBlock, codeBlocks);
+
+    const encodedDataWithErrorCorrection = interleaveDataBlocks(codeBlocks) + interleaveDataBlocks(errorBlocks);
+    const remainderBits = Remainder_Bits[version - 1];
+
+    const finalEncodedData = encodedDataWithErrorCorrection.padEnd(encodedDataWithErrorCorrection.length + remainderBits, "0");
+
+    return finalEncodedData;
 }
 
 function encodedDataWithPaddings(dataAry, capacity) {
@@ -205,4 +216,109 @@ function encodeByteData(value) {
     }
 
     return binaryAry;
+}
+
+
+// Error Correct Code
+
+function interleaveDataBlocks(dataBlocks) {
+    const interleavedData = [];
+    const maxLen = Math.max(...dataBlocks.map(block => block.length));
+
+    for (let i = 0; i < maxLen; i++) {
+        for (const block of dataBlocks) {
+            const bin = block[i];
+            if (bin !== undefined && bin !== null) interleavedData.push(bin);
+        }
+    }
+
+    return interleavedData.join("");
+}
+
+function getAllCodeBlocks(encodedData, group1, group2) {
+    let start = 0;
+    let codeBlocks = [];
+
+    for (let i = 0; i < group1[0]; i++) {
+        const block = encodedData.slice(start, start + group1[1]);
+        codeBlocks.push(block);
+        start += group1[1];
+    }
+
+    for (let i = 0; i < group2[0]; i++) {
+        const block = encodedData.slice(start, start + group2[1]);
+        codeBlocks.push(block);
+        start += group2[1];
+    }
+
+    return codeBlocks
+}
+
+function getAllErrorCorectionCode(errorCodeware, codeBlocks) {
+    const errorBlocks = [];
+
+    for (const code of codeBlocks) {
+        errorBlocks.push( errorCorrectioCodeGen(errorCodeware, code) );
+    }
+
+    return errorBlocks;
+}
+
+function errorCorrectioCodeGen(errorCodeware, encodedData) {
+    const messagePoly = encodedData.map((bin, i) => [parseInt(bin, 2), encodedData.length - 1 - i + errorCodeware]);
+    let generatorPoly = GeneratorPolynomial(errorCodeware);
+
+    const xAddTerm = messagePoly[0][1] - generatorPoly[0][1];
+    generatorPoly = generatorPoly.map(ary => [ary[0], ary[1] + xAddTerm]);
+
+    const remainder = polyDivisionRecur(messagePoly.map(ary => ary[0]), generatorPoly.map(ary => ary[0]), messagePoly.length);
+    
+    return remainder.map(int => int.toString(2).padStart(8, "0"));
+}
+
+function polyDivisionRecur(message, generator, steps) {
+    if (steps <= 0) return message;
+
+    const mulExp = findExp(message[0]);
+
+    const newGenerator = generator.map(exp => findInt(exp + mulExp > 255 ? (exp + mulExp) % 255 : (exp + mulExp)));
+    
+    message = message.length > newGenerator.length ? message.map((msg, ind) => msg ^ (newGenerator[ind] ?? 0)) : newGenerator.map((msg, ind) => msg ^ (message[ind] ?? 0));
+
+    if (message[0] === 0) message.shift();
+
+    return polyDivisionRecur(message, generator, steps - 1);
+}
+
+function GeneratorPolynomial(codeware, n1 = [[0,1],[0,0]], n2 = [[0,1],[1,0]]) {
+    if (n2[1][0] >= codeware) return n1;
+
+    const result = [];
+    let newN1 = [];
+    for (let n1i of n1) {
+        for (let n2i of n2) {
+            const a = (n1i[0] + n2i[0]) > 255 ? (n1i[0] + n2i[0]) % 255 : (n1i[0] + n2i[0]);
+            const x = n1i[1] + n2i[1];
+            newN1.push([a, x]);
+        }
+    }
+
+    while (newN1.length > 0) {
+        const likeTerms = newN1.filter(trm => trm[1] === newN1[0][1]);
+        const unlikeTerms = newN1.filter(trm => trm[1] !== newN1[0][1]);
+        let addXor = likeTerms.map(trm => trm[0]).reduce((acc, val) => acc ^ findInt(val), 0);
+        result.push([findExp(addXor), newN1[0][1]]);
+        newN1 = unlikeTerms;
+    }
+
+    n2[1][0] = n2[1][0] + 1;
+    return GeneratorPolynomial(codeware, result, n2);
+}
+
+function findInt(exp) {
+    return Galois_Field_Table.find(val => val.exp === exp).int;
+}
+
+function findExp(int) {
+    return Galois_Field_Table.find(val => val.int === int).exp;
 }
