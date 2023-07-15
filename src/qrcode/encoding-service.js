@@ -81,7 +81,7 @@ export function qrEncodedData(value, correctionLevel) {
 
     const finalEncodedData = encodedDataWithErrorCorrection.padEnd(encodedDataWithErrorCorrection.length + remainderBits, "0");
 
-    return finalEncodedData;
+    return {data: finalEncodedData, version: version};
 }
 
 function encodedDataWithPaddings(dataAry, capacity) {
