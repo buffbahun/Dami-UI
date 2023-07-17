@@ -1,4 +1,4 @@
-import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table, Galois_Field_Table, Remainder_Bits} from "./encoding-structure";
+import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table, Galois_Field_Table, Remainder_Bits, Format_Information_Table} from "./encoding-structure";
 
 function getQrMode(value) {
     if (typeof value !== "string" || value === "") {
@@ -285,9 +285,10 @@ function polyDivisionRecur(message, generator, steps) {
     
     message = message.length > newGenerator.length ? message.map((msg, ind) => msg ^ (newGenerator[ind] ?? 0)) : newGenerator.map((msg, ind) => msg ^ (message[ind] ?? 0));
 
-    if (message[0] === 0) message.shift();
+    let i = 0;
+    while (message[0] === 0) {message.shift();i++;}
 
-    return polyDivisionRecur(message, generator, steps - 1);
+    return polyDivisionRecur(message, generator, steps - i);
 }
 
 function GeneratorPolynomial(codeware, n1 = [[0,1],[0,0]], n2 = [[0,1],[1,0]]) {
@@ -307,7 +308,7 @@ function GeneratorPolynomial(codeware, n1 = [[0,1],[0,0]], n2 = [[0,1],[1,0]]) {
         const likeTerms = newN1.filter(trm => trm[1] === newN1[0][1]);
         const unlikeTerms = newN1.filter(trm => trm[1] !== newN1[0][1]);
         let addXor = likeTerms.map(trm => trm[0]).reduce((acc, val) => acc ^ findInt(val), 0);
-        result.push([findExp(addXor), newN1[0][1]]);
+        addXor === 0 ? null : result.push([findExp(addXor), newN1[0][1]]);
         newN1 = unlikeTerms;
     }
 
@@ -321,4 +322,173 @@ function findInt(exp) {
 
 function findExp(int) {
     return Galois_Field_Table.find(val => val.int === int).exp;
+}
+
+export function getFinalQrAry(qrAry, qrSize, dataIds, correctionLevel, version) {
+    const qrArysWithFormatAndVersionInfo = getQrArysWithFormatAndVersionInfo([...qrAry], qrSize, correctionLevel, version);
+    const maskedQrArys = getMaskedQrArys(qrArysWithFormatAndVersionInfo, dataIds, qrSize);
+    const qrAryWithMinPenalty = getQrAryWithMinPenalty(maskedQrArys, qrSize);
+
+    return qrAryWithMinPenalty;
+}
+
+function getQrArysWithFormatAndVersionInfo(qrAry, qrSize, correctionLevel, version) {
+    const qrArysWithInfo = [];
+    getQrArysWithFormatInfo(qrAry, qrSize, correctionLevel, qrArysWithInfo);
+    //getQrArysWithVersionInfo(qrAry, qrSize, version, qrArysWithInfo);
+
+    return qrArysWithInfo;
+}
+
+function getQrArysWithFormatInfo(qrAry, qrSize, correctionLevel, qrArysWithInfo) {
+    const formatBitsAry = Format_Information_Table[correctionLevel];
+
+    const versionId0 = [0 + qrSize * 8, 1 + qrSize * 8, 2 + qrSize * 8, 3 + qrSize * 8, 4 + qrSize * 8, 5 + qrSize * 8, 7 + qrSize * 8, 8 + qrSize * 8, 8 + qrSize * 7, 8 + qrSize * 5, 8 + qrSize * 4, 8 + qrSize * 3, 8 + qrSize * 2, 8 + qrSize * 1, 8 + qrSize * 0,]
+    const versionId1 = [null, null, null, null, null, null, null, qrSize - 8 + qrSize * 8, qrSize - 7 + qrSize * 8, qrSize - 6 + qrSize * 8, qrSize - 5 + qrSize * 8, qrSize - 4 + qrSize * 8, qrSize - 3 + qrSize * 8, qrSize - 2 + qrSize * 8, qrSize - 1 + qrSize * 8,]
+    const versionId2 = [8 + qrSize * (qrSize - 1), 8 + qrSize * (qrSize - 2), 8 + qrSize * (qrSize - 3), 8 + qrSize * (qrSize - 4), 8 + qrSize * (qrSize - 5), 8 + qrSize * (qrSize - 6), 8 + qrSize * (qrSize - 7), null, null, null, null, null, null, null, null,]
+
+    for (const formatBits of formatBitsAry) {
+        const qrAryClone = [...qrAry];
+
+        versionId0.forEach((val, ind) => {
+            const id = val;
+            if (id !== null) {
+                qrAryClone[id] = Number(formatBits[ind]);
+            }
+        });
+        versionId1.forEach((val, ind) => {
+            const id = val;
+            if (id !== null) {
+                qrAryClone[id] = Number(formatBits[ind]);
+            }
+        });
+        versionId2.forEach((val, ind) => {
+            const id = val;
+            if (id !== null) {
+                qrAryClone[id] = Number(formatBits[ind]);
+            }
+        });
+
+        qrArysWithInfo.push(qrAryClone);
+    }
+}
+
+function getMaskedQrArys(qrArys, dataIds, qrSize) {
+    let mask = 0;
+    for (const qrAry of qrArys) {
+        for (const id of dataIds) {
+            const row = id % qrSize;
+            const column = Math.trunc(id / qrSize);
+
+            if (mask === 0 && (row + column) % 2 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 1 && (column) % 2 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 2 && (row) % 3 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 3 && (row + column) % 3 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 4 && ( Math.floor(column / 2) + Math.floor(row / 3) ) % 2 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 5 && ((row * column) % 2) + ((row * column) % 3) === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 6 && ( ((row * column) % 2) + ((row * column) % 3) ) % 2 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+            if (mask === 7 && ( ((row + column) % 2) + ((row * column) % 3) ) % 2 === 0) {
+                qrAry[id] = 1 ^ qrAry[id];
+            }
+        }
+        mask++;
+    }
+
+    return qrArys;
+}
+
+function getQrAryWithMinPenalty(maskedQrArys, qrSize) {
+    const penaltyAry = [];
+    
+    for (const qrAry of maskedQrArys) {
+        let penalty = 0;
+        const rows = [];
+        const cols = [];
+
+        // Penalty 1
+        for (let i = 0; i < qrSize; i++) {
+            const rowAry = qrAry.slice(qrSize * i, qrSize * (i + 1));
+            rows.push(rowAry);
+            penalty += calcPenalty1(rowAry);
+        }
+
+        for (let i = 0; i < qrSize; i++) {
+            const colAry = rows.map(rw => rw[i]);
+            cols.push(colAry);
+            penalty += calcPenalty1(colAry);
+        }
+
+        //Penalty 2
+        for (let i = 0; i < qrSize - 1; i++) {
+            for (let j = 0; j < qrSize - 1; j++) {
+                let sum = rows[i][j] + rows[i][j + 1] + rows[i + 1][j] + rows[i + 1][j + 1];
+                if (sum === 0 || sum === 4) penalty += 3; 
+            }
+        }
+
+        //Penalty 3
+        const penalty3Patter = ["10111010000", "00001011101"];
+        for (let i = 0; i < qrSize; i++) {
+            for (let j = 0; j < qrSize - penalty3Patter[0].length; j++) {
+                const str = rows[i].slice(j, j + penalty3Patter[0].length).join("");
+                if (str === penalty3Patter[0] || str === penalty3Patter[1]) penalty += 40;
+            }
+        }
+
+        for (let i = 0; i < qrSize; i++) {
+            for (let j = 0; j < qrSize - penalty3Patter[0].length; j++) {
+                const str = cols[i].slice(j, j + penalty3Patter[0].length).join("");
+                if (str === penalty3Patter[0] || str === penalty3Patter[1]) penalty += 40;
+            }
+        }
+
+        // Penalty 4
+        const modulesLen = qrAry.length;
+        const darkModulesLen = qrAry.filter(bt => bt === 1).length;
+        const darkPerc = (darkModulesLen / modulesLen) * 100;
+        const roundedPercentage = darkPerc > 50
+                                    ? Math.floor(darkPerc / 5) * 5
+                                    : Math.ceil(darkPerc / 5) * 5;
+        const mixPenalty = Math.abs(roundedPercentage - 50) * 2;
+        penalty += mixPenalty;
+
+        penaltyAry.push(penalty);
+    }
+
+    const smallestVal = Math.min(...penaltyAry);
+    const ind = penaltyAry.indexOf(smallestVal);
+
+    return maskedQrArys[ind];
+}
+
+function calcPenalty1(rowAry) {
+    let penalty = 0;
+    let cnt = 0;
+    let bit = rowAry[0];
+    for (const bitVal of rowAry) {
+        if (bit === bitVal) cnt++;
+        else {
+            if (cnt >= 5) penalty += (cnt - 2);
+            cnt = 1;
+            bit = bitVal;
+        }
+    }
+
+    if (cnt >= 5) penalty += (cnt - 2);
+
+    return penalty;
 }

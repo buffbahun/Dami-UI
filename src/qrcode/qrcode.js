@@ -1,4 +1,4 @@
-import { qrEncodedData } from "./encoding-service";
+import { qrEncodedData, getFinalQrAry } from "./encoding-service";
 import {Alignment_Pattern_Locations_Table} from "./encoding-structure";
 
 const svgns = "http://www.w3.org/2000/svg";
@@ -21,6 +21,7 @@ class DamiQrcode extends HTMLElement {
 
         this.xyPadding = 10;
         this.qrSize;
+        this.dataIds = [];
 
         this.width = 300;
         this.color = "black";
@@ -48,7 +49,7 @@ class DamiQrcode extends HTMLElement {
     connectedCallback() {
         this.initSvgSize();
 
-        const {data, version} = qrEncodedData("HELLO WORLD", "Q");
+        const {data, version} = qrEncodedData("https://www.instagram.com/ranjita_khadka_/?hl=en", "Q");
         // const version = 2;
 
         this.initQr(version);
@@ -66,6 +67,14 @@ class DamiQrcode extends HTMLElement {
         const reservedIds = [...formatInfoIds, ...versionInfoIds];
 
         this.placeDataBits(data, reservedIds);
+
+        const dataMap = this.qrDataMap();
+
+        const testAry = getFinalQrAry(dataMap, this.qrSize, this.dataIds, "Q", version);
+
+        for (let i = 0; i < this.qrSize * this.qrSize; i++) {
+            this.svgElm.getElementById(i).setAttribute("fill",testAry[i] === 1 ? "black" : "white");
+        }
     }
 
     static get observedAttributes() {
@@ -91,6 +100,20 @@ class DamiQrcode extends HTMLElement {
         }
     }
 
+    qrDataMap() {
+        const dataMap = [];
+        for (let id = 0; id < this.qrSize * this.qrSize; id++) {
+            let bit;
+            if (this.svgElm.getElementById(id).getAttribute("fill") === "black") bit = 1;
+            else if (this.svgElm.getElementById(id).getAttribute("fill") === "white") bit = 0;
+            else bit = -1;
+
+            dataMap.push(bit);
+        }
+
+        return dataMap;
+    }
+
     placeDataBits(data, reservedIds) {
         let x = this.qrSize - 1;
         let y = this.qrSize - 1;
@@ -108,6 +131,7 @@ class DamiQrcode extends HTMLElement {
 
                 const color = bit === "1" ? "black" : "white";
                 this.svgElm.getElementById(id).setAttribute("fill", color);
+                this.dataIds.push(id);
             }
 
             if (left) {
