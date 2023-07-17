@@ -1,4 +1,4 @@
-import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table, Galois_Field_Table, Remainder_Bits, Format_Information_Table} from "./encoding-structure";
+import {Character_Capacity_Table, Character_Count_Indicator, Mode_Indicator, Alphanumeric_Code, Error_Correction_Code_Table, Galois_Field_Table, Remainder_Bits, Format_Information_Table, Version_Information_Table} from "./encoding-structure";
 
 function getQrMode(value) {
     if (typeof value !== "string" || value === "") {
@@ -335,7 +335,7 @@ export function getFinalQrAry(qrAry, qrSize, dataIds, correctionLevel, version) 
 function getQrArysWithFormatAndVersionInfo(qrAry, qrSize, correctionLevel, version) {
     const qrArysWithInfo = [];
     getQrArysWithFormatInfo(qrAry, qrSize, correctionLevel, qrArysWithInfo);
-    //getQrArysWithVersionInfo(qrAry, qrSize, version, qrArysWithInfo);
+    getQrArysWithVersionInfo(qrSize, version, qrArysWithInfo);
 
     return qrArysWithInfo;
 }
@@ -371,6 +371,38 @@ function getQrArysWithFormatInfo(qrAry, qrSize, correctionLevel, qrArysWithInfo)
 
         qrArysWithInfo.push(qrAryClone);
     }
+}
+
+function getQrArysWithVersionInfo(qrSize, version, qrArysWithInfo) {
+    if (version < 7) return;
+    const versionBits = Version_Information_Table[version - 7].split("").reverse();
+    const bitPlacmentPos1 = [];
+    const bitPlacmentPos2 = [];
+
+    for (let i = 0; i < 6; i++) {
+        bitPlacmentPos1.push( i + qrSize * (qrSize - 11), i + qrSize * (qrSize - 10), i + qrSize * (qrSize - 9) );
+    }
+
+    for (let i = 0; i < 6; i++) {
+        bitPlacmentPos2.push( qrSize - 11 + qrSize * i, qrSize - 10 + qrSize * i, qrSize - 9 + qrSize * i );
+    }
+
+    for (const qrAry of qrArysWithInfo) {
+
+        bitPlacmentPos1.forEach((val, ind) => {
+            const id = val;
+            if (id !== null) {
+                qrAry[id] = Number(versionBits[ind]);
+            }
+        });
+        bitPlacmentPos2.forEach((val, ind) => {
+            const id = val;
+            if (id !== null) {
+                qrAry[id] = Number(versionBits[ind]);
+            }
+        });
+    }
+
 }
 
 function getMaskedQrArys(qrArys, dataIds, qrSize) {

@@ -23,10 +23,11 @@ class DamiQrcode extends HTMLElement {
         this.qrSize;
         this.dataIds = [];
 
-        this.width = 300;
+        this.size = 300;
         this.color = "black";
         this.background = "white";
-        this.font = "Consolas, Monaco, Sans Mono, monospace, sans-serif";
+        this.errorCorrection = "L";
+        this.value = "";
     }
 
     initShadow() {
@@ -36,7 +37,7 @@ class DamiQrcode extends HTMLElement {
     }
 
     initSvgSize() {
-        const width = this.getAttribute("width") ? Number(this.getAttribute("width")) : this.width;
+        const width = this.getAttribute("width") ? Number(this.getAttribute("size")) : this.size;
 
         if (typeof width === "number") {
             this.svgElm.setAttribute("width", width);
@@ -47,9 +48,16 @@ class DamiQrcode extends HTMLElement {
     }
 
     connectedCallback() {
+        const value = this.getAttribute("value") ? this.getAttribute("value") : this.value;
+        const errorCorrection = this.getAttribute("errorCorrection") ? this.getAttribute("errorCorrection") : this.errorCorrection;
+        const color = this.getAttribute("color") ? this.getAttribute("color") : this.color;
+        const background = this.getAttribute("background") ? this.getAttribute("background") : this.background;
+
+        this.svgElm.style.background = background;
+
         this.initSvgSize();
 
-        const {data, version} = qrEncodedData("https://www.instagram.com/ranjita_khadka_/?hl=en", "Q");
+        const {data, version} = qrEncodedData(value, errorCorrection);
         // const version = 2;
 
         this.initQr(version);
@@ -70,10 +78,10 @@ class DamiQrcode extends HTMLElement {
 
         const dataMap = this.qrDataMap();
 
-        const testAry = getFinalQrAry(dataMap, this.qrSize, this.dataIds, "Q", version);
+        const testAry = getFinalQrAry(dataMap, this.qrSize, this.dataIds, errorCorrection, version);
 
         for (let i = 0; i < this.qrSize * this.qrSize; i++) {
-            this.svgElm.getElementById(i).setAttribute("fill",testAry[i] === 1 ? "black" : "white");
+            this.svgElm.getElementById(i).setAttribute("fill",testAry[i] === 1 ? color : background);
         }
     }
 
