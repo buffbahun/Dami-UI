@@ -37,7 +37,7 @@ class DamiQrcode extends HTMLElement {
     }
 
     initSvgSize() {
-        const width = this.getAttribute("width") ? Number(this.getAttribute("size")) : this.size;
+        const width = this.getAttribute("size") ? Number(this.getAttribute("size")) : this.size;
 
         if (typeof width === "number") {
             this.svgElm.setAttribute("width", width);
@@ -58,7 +58,6 @@ class DamiQrcode extends HTMLElement {
         this.initSvgSize();
 
         const {data, version} = qrEncodedData(value, errorCorrection);
-        // const version = 2;
 
         this.initQr(version);
 
